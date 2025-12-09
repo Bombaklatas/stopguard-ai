@@ -68,7 +68,7 @@ stopguard-ai/
 ✅ Hack4Vilnius duomenys  
 ✅ Interaktyvi vizualizacija  
 
-## 👨‍💻 Autorius
+## 👨‍💻 Autorius - Tomas Jagminas
 Egzamino darbas - 2024
 
 ## 📄 Licencija
