@@ -73,3 +73,4 @@ Egzamino darbas - 2024
 
 ## 📄 Licencija
 MIT License
+# stopguard-ai
