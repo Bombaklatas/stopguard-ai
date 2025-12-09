@@ -258,36 +258,47 @@ def main():
     
     # Sidebar: Analizės įrankiai
     with st.sidebar:
-        st.header("📊 Analizės Įrankiai")
+        st.header("🎯 Ką norite padaryti?")
         
         analysis_mode = st.radio(
-            "Pasirinkite režimą:",
-            ["💬 Chat Asistentas", "🔍 Anomalijų Analizė", "📈 Statistika", "🗺️ Clustering Žemėlapis"]
+            "Pasirinkite:",
+            ["💬 Rasti Stotelę", "🔍 Problemų Paieška", "📈 Miesto Apžvalga", "🗺️ Zonų Analizė"]
         )
         
         st.divider()
         
-        # Statistika sidebar'e
-        st.metric("Iš viso stotelių", len(df))
-        st.metric("Vidutinė kokybė", f"{df['Kokybe'].mean():.1f}/100")
-        st.metric("Anomalijų", df['is_anomaly'].sum())
+        # Technologijos (sudėtos žemiau)
+        with st.expander("🤖 Techninė informacija"):
+            st.markdown("""
+            **Naudojami AI/ML metodai:**
+            1. Sentence Transformers (NLP)
+            2. Sentimentų analizė (NLP)
+            3. Isolation Forest (ML)
+            4. K-Means Clustering (ML)
+            """)
         
-        avg_sentiment = df['sentiment_total'].mean()
-        sentiment_emoji = "😊" if avg_sentiment > 0 else "😐" if avg_sentiment == 0 else "😟"
-        st.metric("Vidutinis sentiment", f"{avg_sentiment:.2f} {sentiment_emoji}")
+        st.divider()
+        
+        # Statistika
+        st.caption("📊 **Duomenys:**")
+        st.metric("Stotelių", len(df))
+        st.metric("Vidutinė kokybė", f"{df['Kokybe'].mean():.1f}/100")
+        
+        problem_stops = len(df[df['Kokybe'] < 50])
+        st.metric("Probleminių", problem_stops, delta=f"{problem_stops/len(df)*100:.0f}%", delta_color="inverse")
     
     # ==================== REŽIMAI ====================
     
-    if analysis_mode == "💬 Chat Asistentas":
+    if analysis_mode == "💬 Rasti Stotelę":
         render_chat_mode(df, model)
     
-    elif analysis_mode == "🔍 Anomalijų Analizė":
+    elif analysis_mode == "🔍 Problemų Paieška":
         render_anomaly_mode(df)
     
-    elif analysis_mode == "📈 Statistika":
+    elif analysis_mode == "📈 Miesto Apžvalga":
         render_statistics_mode(df)
     
-    elif analysis_mode == "🗺️ Clustering Žemėlapis":
+    elif analysis_mode == "🗺️ Zonų Analizė":
         render_clustering_mode(df)
 
 # ==================== CHAT REŽIMAS ====================
@@ -296,7 +307,7 @@ def render_chat_mode(df, model):
     if "messages" not in st.session_state:
         st.session_state.messages = [{
             "role": "assistant", 
-            "content": "Labas! Aš esu AI asistentas. Parašykite stotelės pavadinimą ir analizuosiu jos infrastruktūrą."
+            "content": "Labas! 👋 Įrašykite **stotelės pavadinimą** (pvz. Klinikos, Saulėtekis, Antakalnis) ir parodysiu jos infrastruktūrą bei būklę."
         }]
     
     if "current_view_stop" not in st.session_state:
@@ -319,34 +330,51 @@ def render_chat_mode(df, model):
             if candidates.empty:
                 response = "Atsiprašau, neradau nieko panašaus. Galite patikslinti?"
                 st.session_state.messages.append({"role": "assistant", "content": response})
+                st.session_state.direction_candidates = None
             else:
                 if len(candidates) > 1:
-                    response = f"Radau {len(candidates)} stoteles. Pasirinkite kryptį:"
+                    response = f"Radau **{len(candidates)}** stoteles pavadinimu **{candidates.iloc[0]['pavadinimas']}**. Pasirinkite kryptį žemiau ↓"
                     st.session_state.messages.append({"role": "assistant", "content": response})
                     st.session_state.direction_candidates = candidates
                 else:
                     stop = candidates.iloc[0]
-                    st.session_state.current_view_stop = stop
-                    response = f"Rodau stotelę: **{stop['pavadinimas']}**."
+                    st.session_state.current_view_stop = stop.to_dict()
+                    response = f"Rodau stotelę: **{stop['pavadinimas']}** ({stop['kryptis']})."
                     st.session_state.messages.append({"role": "assistant", "content": response})
+                    st.session_state.direction_candidates = None
             
             st.rerun()
         
+        # Mygtukai VISADA rodomi už chat'o ribų
         if "direction_candidates" in st.session_state and st.session_state.direction_candidates is not None:
-            st.markdown("---")
-            st.markdown("**Pasirinkite kryptį:**")
+            candidates = st.session_state.direction_candidates
             
-            for _, stop in st.session_state.direction_candidates.iterrows():
+            st.markdown("---")
+            st.markdown("### 📍 Pasirinkite kryptį:")
+            
+            for idx, stop in candidates.iterrows():
                 stop_dict = stop.to_dict()
                 
-                if st.button(
-                    f"👉 {stop['kryptis']}", 
-                    key=f"chat_btn_{stop['uid']}",
-                    on_click=select_stop_callback,
-                    args=(stop_dict,)
-                ):
-                    st.session_state.direction_candidates = None
-                    st.rerun()
+                # Naudojame container kad būtų gražiau
+                with st.container():
+                    col1, col2 = st.columns([3, 1])
+                    
+                    with col1:
+                        st.write(f"**{stop['kryptis']}**")
+                        st.caption(f"Gatvė: {stop['gatve']}")
+                    
+                    with col2:
+                        if st.button(
+                            "Rodyti →", 
+                            key=f"chat_btn_{stop['uid']}",
+                            type="primary",
+                            use_container_width=True
+                        ):
+                            st.session_state.current_view_stop = stop_dict
+                            confirm_msg = f"Rodau stotelę: **{stop['pavadinimas']}** ({stop['kryptis']})"
+                            st.session_state.messages.append({"role": "assistant", "content": confirm_msg})
+                            st.session_state.direction_candidates = None
+                            st.rerun()
     
     with col_visuals:
         stop = st.session_state.current_view_stop
@@ -359,10 +387,14 @@ def render_chat_mode(df, model):
 # ==================== ANOMALIJŲ REŽIMAS ====================
 
 def render_anomaly_mode(df):
-    st.header("🔍 Anomalijų Detektorius")
+    st.header("🔍 Problemų Paieška")
     st.markdown("""
-    **Metodas:** Isolation Forest (unsupervised learning)  
-    **Tikslas:** Rasti stoteles su neįprastomis infrastruktūros kombinacijomis
+    **Kam tai naudinga?**
+    - 🏛️ **Valdžiai:** identifikuoti nelogiškų infrastruktūrų (pvz. yra paviljonas, bet nėra suolo)
+    - 🚍 **Keleivams:** rasti stoteles su nepilna infrastruktūra
+    - 📊 **Analitikams:** prioritizuoti remonto darbus
+    
+    **Kaip veikia?** AI automatiškai aptinka stoteles, kurių infrastruktūra neatitinka standartinių kombinacijų.
     """)
     
     anomalies = df[df['is_anomaly'] == True].sort_values('anomaly_score')
@@ -415,9 +447,15 @@ def render_anomaly_mode(df):
 # ==================== STATISTIKOS REŽIMAS ====================
 
 def render_statistics_mode(df):
-    st.header("📈 Išsami Statistika")
+    st.header("📈 Miesto Apžvalga")
+    st.markdown("""
+    **Kam tai naudinga?**
+    - 📊 Suprasti bendrą Vilniaus stotelių būklę
+    - 📉 Identifikuoti problemines zonas
+    - 💰 Planuoti biudžeto paskirstymą
+    """)
     
-    tab1, tab2, tab3 = st.tabs(["📊 Kokybė", "💭 Sentimentai", "🏗️ Infrastruktūra"])
+    tab1, tab2, tab3 = st.tabs(["📊 Kokybės Įvertinimas", "💭 Būklės Analizė", "🏗️ Infrastruktūros Aprėptis"])
     
     with tab1:
         col1, col2 = st.columns(2)
@@ -481,10 +519,14 @@ def render_statistics_mode(df):
 # ==================== CLUSTERING REŽIMAS ====================
 
 def render_clustering_mode(df):
-    st.header("🗺️ Clustering Analizė")
+    st.header("🗺️ Zonų Analizė")
     st.markdown("""
-    **Metodas:** K-Means Clustering  
-    **Tikslas:** Grupuoti stoteles pagal kokybę ir geografinę vietą
+    **Kam tai naudinga?**
+    - 🎯 **Valdžiai:** identifikuoti kuriose miesto dalyse reikia investuoti
+    - 📍 **Planuotojams:** pamatyti geografinius infrastruktūros skirtumus
+    - 💡 **Analitikams:** suprasti kokybės pasiskirstymą pagal rajonus
+    
+    **Kaip veikia?** AI automatiškai grupuoja stoteles į 4 zonas pagal infrastruktūros kokybę ir vietą.
     """)
     
     # Cluster statistika
@@ -602,27 +644,42 @@ def render_stop_details(stop):
         st_folium(m, width=None, height=350)
 
 def render_welcome_screen(df):
-    st.markdown("### 👋 Sveiki atvykę į StopGuard AI!")
+    st.markdown("### 👋 Sveiki atvykę į StopGuard!")
+    
     st.markdown("""
-    **AI-powered viešojo transporto infrastruktūros analizė**
+    **AI asistentas viešojo transporto keleiviams ir miesto valdžiai**
     
-    🤖 **Naudojami AI/ML metodai:**
-    1. **Sentence Transformers** - semantinė paieška (NLP #1)
-    2. **Sentimentų analizė** - infrastruktūros būklės vertinimas (NLP #2)
-    3. **Isolation Forest** - anomalijų detektorius (ML)
-    4. **K-Means Clustering** - geografinė analizė (ML)
+    #### 🎯 Ką galite padaryti:
     
-    📊 **Sistemos galimybės:**
-    - Natūralios kalbos paieška
-    - Automatinis kokybės vertinimas
-    - Anomalijų aptikimas
-    - Statistinė analizė
+    **🚍 Jei esate keleivis:**
+    - ✅ **Sužinoti stotelės infrastruktūrą** - ar yra paviljonas, suolas, švieslentė
+    - ✅ **Pamatyti realų vaizdą** - Street View nuotrauka
+    - ✅ **Įvertinti kokybę** - automatinis 0-100 balas
     
-    *Pradėkite pokalbį kairėje arba pasirinkite analizės režimą sidebar'e!*
+    **🏛️ Jei esate valdininkas / planuotojas:**
+    - 📊 **Identifikuoti problemingas zonas** - kur trūksta infrastruktūros
+    - 🔍 **Rasti anomalijas** - nelogiškas kombinacijas (pvz. yra paviljonas, bet nėra suolo)
+    - 📈 **Analizuoti miesto būklę** - statistika ir grafikai
+    - 🗺️ **Planuoti investicijas** - geografinė analizė pagal zonas
+    
+    ---
+    
+    **💡 Kaip naudotis:**
+    
+    1. **Kairėje:** Įrašykite **stotelės pavadinimą** (pvz. *Klinikos*, *Saulėtekis*, *Antakalnis*)
+    2. **Dešinėje:** Pasirinkite **analizės būdą** sidebar'e:
+       - *Rasti Stotelę* - greita paieška
+       - *Problemų Paieška* - AI aptinka problemas
+       - *Miesto Apžvalga* - statistika
+       - *Zonų Analizė* - geografinis pasiskirstymas
+    
+    *Pradėkite įrašydami stotelės pavadinimą kairėje!*
     """)
     
-    # Probleminių stotelių žemėlapis
-    st.markdown("##### 🚨 Top 50 Probleminių Stotelių")
+    # Probleminių stotelių žemėlapis kaip "teaser"
+    st.markdown("#### 🚨 Greita Apžvalga: Top 50 Probleminių Stotelių")
+    st.caption("(Raudonos - žema infrastruktūros kokybė)")
+    
     m = folium.Map(location=[54.6872, 25.2797], zoom_start=12, tiles="CartoDB positron")
     bad_stops = df[df['Kokybe'] < 50].head(50)
     
@@ -632,7 +689,7 @@ def render_welcome_screen(df):
             radius=4, 
             color="red", 
             fill=True,
-            popup=f"{row['pavadinimas']}: {row['Kokybe']}/100"
+            popup=f"<b>{row['pavadinimas']}</b><br>Kokybė: {row['Kokybe']}/100<br>{row['kryptis']}"
         ).add_to(m)
     
     st_folium(m, width=None, height=400)
